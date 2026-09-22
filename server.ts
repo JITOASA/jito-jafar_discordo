@@ -190,6 +190,45 @@ async function startServer() {
     }
   });
 
+  app.post('/api/gp/points', (req, res) => {
+    try {
+      const { guildId = 'sim_guild', username, amount, action = 'add', isOwner = false } = req.body || {};
+
+      if (!isOwner) {
+        return res.status(403).json({
+          success: false,
+          error: '⛔ You do not have permission to use this command.',
+        });
+      }
+
+      if (!username || typeof amount !== 'number') {
+        return res.status(400).json({ success: false, error: 'Missing parameters' });
+      }
+
+      const result = db.updateGeneralPoints(guildId, username, amount, action);
+      if (result.error === 'insufficient_balance') {
+        return res.status(400).json({
+          success: false,
+          error: `⚠️ Cannot remove ${amount} general points. User @${username} only has ${result.previousBalance} general points.`,
+        });
+      }
+
+      res.json({ success: true, ...result });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  app.get('/api/gp/leaderboard', (req, res) => {
+    try {
+      const guildId = (req.query.guildId as string) || 'sim_guild';
+      const leaderboard = db.getGuildLeaderboard(guildId, 10);
+      res.json({ success: true, leaderboard });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
   app.post('/api/tournaments/status', (req, res) => {
     try {
       const { tournamentId, status, isOwner = false } = req.body || {};

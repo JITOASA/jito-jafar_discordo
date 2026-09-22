@@ -21,6 +21,7 @@ import hideAndSeekCommand from './hideAndSeek.js';
 import chairsCommand from './chairs.js';
 import rouletteCommand from './roulette.js';
 import pointsCommand from './points.js';
+import gpCommand from './gp.js';
 import config from '../config/index.js';
 import logger from '../utils/logger.js';
 
@@ -39,6 +40,7 @@ export const commandsList = [
   chairsCommand,
   rouletteCommand,
   pointsCommand,
+  gpCommand,
   leaderboardCommand,
   gamesCommand,
   pingCommand,
@@ -115,7 +117,7 @@ export async function handleMessage(message) {
   } else {
     // 2. Also support direct Arabic commands without exclamation mark if enabled
     const firstWord = content.split(/\s+/)[0].toLowerCase();
-    if (['اعكس', 'اعلام', 'أعلام', 'حرف', 'الحرف', 'خمن', 'خمن_الرقم', 'رقم', 'الرقم', 'زر', 'الزر', 'button', 'اسرع', 'أسرع', 'fastest', 'فكك', 'فك', 'disassemble', 'صحح', 'الصحح', 'correct', 'مافيا', 'mafia', 'غميضة', 'غميضه', 'كراسي', 'كراسيه', 'chairs', 'نقاط', 'النقاط', 'مساعدة', 'العاب', 'ألعاب', 'الالعاب', 'الألعاب', 'games', 'guess'].includes(firstWord)) {
+    if (['اعكس', 'اعلام', 'أعلام', 'حرف', 'الحرف', 'خمن', 'خمن_الرقم', 'رقم', 'الرقم', 'زر', 'الزر', 'button', 'اسرع', 'أسرع', 'fastest', 'فكك', 'فك', 'disassemble', 'صحح', 'الصحح', 'correct', 'مافيا', 'mafia', 'غميضة', 'غميضه', 'كراسي', 'كراسيه', 'chairs', 'نقاط', 'النقاط', 'gp', 'النقاط_العامة', 'نقاط_عامة', 'مساعدة', 'العاب', 'ألعاب', 'الالعاب', 'الألعاب', 'games', 'guess'].includes(firstWord)) {
       commandKey = firstWord;
     }
   }

@@ -188,6 +188,17 @@ class DatabaseManager {
             new_balance INTEGER NOT NULL,
             created_at TIMESTAMPTZ DEFAULT NOW()
           );
+
+          CREATE TABLE IF NOT EXISTS jafar_gp_adjustments (
+            id VARCHAR(64) PRIMARY KEY,
+            owner_id VARCHAR(255) DEFAULT '.evre',
+            target_user VARCHAR(255) NOT NULL,
+            action_type VARCHAR(32) NOT NULL,
+            amount INTEGER NOT NULL,
+            previous_balance INTEGER NOT NULL,
+            new_balance INTEGER NOT NULL,
+            created_at TIMESTAMPTZ DEFAULT NOW()
+          );
         `);
 
         this.isPostgresConnected = true;
@@ -732,6 +743,142 @@ class DatabaseManager {
       newBalance: newPoints,
       amount: numAmount,
       targetUser: cleanUsername,
+    };
+  }
+
+  /**
+   * Retrieves player's general points balance
+   */
+  getGeneralPoints(guildId = 'sim_guild', usernameOrId) {
+    const cleanName = (usernameOrId || '').replace(/[@<#!>]/g, '').trim();
+    if (!cleanName) return 0;
+
+    const guildUsers = this.data.guilds[guildId] || {};
+    if (guildUsers[cleanName]) {
+      return guildUsers[cleanName].points || 0;
+    }
+
+    const found = Object.values(guildUsers).find(
+      (u) => u.username && u.username.toLowerCase() === cleanName.toLowerCase()
+    );
+    if (found) return found.points || 0;
+
+    for (const gId in this.data.guilds) {
+      const users = Object.values(this.data.guilds[gId]);
+      const match = users.find(
+        (u) => (u.username && u.username.toLowerCase() === cleanName.toLowerCase()) || u.userId === cleanName
+      );
+      if (match) return match.points || 0;
+    }
+
+    return 0;
+  }
+
+  /**
+   * Manually updates general game points in jafar_scores
+   */
+  updateGeneralPoints(guildId = 'sim_guild', usernameOrId, amount, action = 'add', ownerHandle = '.evre') {
+    const cleanName = (usernameOrId || '').replace(/[@<#!>]/g, '').trim();
+    if (!cleanName) return { error: 'invalid_user' };
+
+    const numAmount = Math.max(0, parseInt(amount, 10) || 0);
+
+    let user = null;
+    const guildUsers = this.data.guilds[guildId] || {};
+    if (guildUsers[cleanName]) {
+      user = guildUsers[cleanName];
+    } else {
+      const found = Object.values(guildUsers).find(
+        (u) => u.username && u.username.toLowerCase() === cleanName.toLowerCase()
+      );
+      if (found) {
+        user = found;
+      } else {
+        user = this._ensureUser(guildId, cleanName, cleanName);
+      }
+    }
+
+    const currentPoints = user.points || 0;
+
+    if (action === 'remove' && numAmount > currentPoints) {
+      return {
+        error: 'insufficient_balance',
+        previousBalance: currentPoints,
+        requestedAmount: numAmount,
+        targetUser: cleanName,
+      };
+    }
+
+    let newPoints = currentPoints;
+    if (action === 'add') {
+      newPoints = currentPoints + numAmount;
+    } else if (action === 'remove') {
+      newPoints = Math.max(0, currentPoints - numAmount);
+    } else {
+      newPoints = Math.max(0, numAmount);
+    }
+
+    user.points = newPoints;
+    this._saveLocalBackup();
+
+    if (this.pool && this.isPostgresConnected) {
+      this.pool.query(`
+        INSERT INTO jafar_scores (
+          guild_id, user_id, username, points, total_wins, first_seen, last_won, updated_at
+        )
+        VALUES ($1, $2, $3, $4, 0, NOW(), NOW(), NOW())
+        ON CONFLICT (guild_id, user_id) DO UPDATE SET
+          username = EXCLUDED.username,
+          points = EXCLUDED.points,
+          updated_at = NOW();
+      `, [guildId, user.userId, user.username, newPoints]).catch((err) => {
+        logger.warn('خطأ أثناء تعديل نقاط الألعاب العامة في PostgreSQL:', err.message);
+      });
+    }
+
+    const adjustmentRecord = {
+      id: 'gp_adj_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7),
+      owner: ownerHandle,
+      targetUser: cleanName,
+      type: action.toUpperCase(),
+      amount: numAmount,
+      previousBalance: currentPoints,
+      newBalance: newPoints,
+      timestamp: new Date().toISOString(),
+    };
+
+    if (!this.data.gpAdjustments) {
+      this.data.gpAdjustments = [];
+    }
+    this.data.gpAdjustments.push(adjustmentRecord);
+
+    if (this.pool && this.isPostgresConnected) {
+      this.pool.query(`
+        INSERT INTO jafar_gp_adjustments (
+          id, owner_id, target_user, action_type, amount, previous_balance, new_balance, created_at
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8);
+      `, [
+        adjustmentRecord.id,
+        adjustmentRecord.owner,
+        adjustmentRecord.targetUser,
+        adjustmentRecord.type,
+        adjustmentRecord.amount,
+        adjustmentRecord.previousBalance,
+        adjustmentRecord.newBalance,
+        adjustmentRecord.timestamp
+      ]).catch(err => {
+        logger.warn('خطأ أثناء تسجيل سجل تعديل النقاط العامة في PostgreSQL:', err.message);
+      });
+    }
+
+    return {
+      success: true,
+      previousBalance: currentPoints,
+      newBalance: newPoints,
+      amount: numAmount,
+      targetUser: cleanName,
+      adjustment: adjustmentRecord,
     };
   }
 }

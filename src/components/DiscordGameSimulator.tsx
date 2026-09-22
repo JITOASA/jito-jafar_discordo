@@ -2678,6 +2678,244 @@ export const DiscordGameSimulator: React.FC<SimulatorProps> = ({ onWinRecorded }
       return;
     }
 
+    // --- General Points Commands (!GP) ---
+    if (upperInput.startsWith('!GP') || upperInput.startsWith('!نقاط_عامة') || upperInput.startsWith('!النقاط_العامة')) {
+      setChatLog((prev) => [
+        ...prev,
+        { sender: 'user', text: `${playerName}: ${trimmed}`, time: now },
+      ]);
+      setUserInput('');
+
+      const parts = trimmed.split(/\s+/);
+      const subCmd = parts[1] ? parts[1].toUpperCase() : '';
+
+      if (subCmd === 'ADD' || subCmd === 'إضافة' || subCmd === 'اضافة' || subCmd === '+') {
+        const targetUser = parts[2] ? parts[2].replace(/[@<#!>]/g, '') : '';
+        const amount = parseInt(parts[3], 10);
+
+        if (!isOwnerRole) {
+          setChatLog((prev) => [
+            ...prev,
+            { sender: 'bot', text: '⛔ You do not have permission to use this command.', time: now },
+          ]);
+          return;
+        }
+
+        if (!targetUser || isNaN(amount) || amount <= 0) {
+          setChatLog((prev) => [
+            ...prev,
+            { sender: 'bot', text: '💡 Usage: `!GP ADD @USER <amount>`', time: now },
+          ]);
+          return;
+        }
+
+        fetch('/api/gp/points', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            guildId: 'sim_guild',
+            username: targetUser,
+            amount,
+            action: 'add',
+            isOwner: true,
+          }),
+        })
+          .then((r) => r.json())
+          .then((data) => {
+            if (data.success) {
+              setChatLog((prev) => [
+                ...prev,
+                {
+                  sender: 'bot',
+                  text:
+                    `🏆 **General Points**\n\n` +
+                    `@${targetUser} received +${amount} general points.\n\n` +
+                    `**Previous:** ${data.previousBalance}\n` +
+                    `**Added:** +${amount}\n` +
+                    `**New total:** ${data.newBalance}`,
+                  time: now,
+                },
+              ]);
+              if (onWinRecorded) onWinRecorded();
+            }
+          })
+          .catch(() => {
+            const prevPts = sessionPoints;
+            const newPts = prevPts + amount;
+            setSessionPoints(newPts);
+            setChatLog((prev) => [
+              ...prev,
+              {
+                sender: 'bot',
+                text:
+                  `🏆 **General Points**\n\n` +
+                  `@${targetUser} received +${amount} general points.\n\n` +
+                  `**Previous:** ${prevPts}\n` +
+                  `**Added:** +${amount}\n` +
+                  `**New total:** ${newPts}`,
+                time: now,
+              },
+            ]);
+          });
+        return;
+      }
+
+      if (subCmd === 'REMOVE' || subCmd === 'خصم' || subCmd === 'سحب' || subCmd === '-') {
+        const targetUser = parts[2] ? parts[2].replace(/[@<#!>]/g, '') : '';
+        const amount = parseInt(parts[3], 10);
+
+        if (!isOwnerRole) {
+          setChatLog((prev) => [
+            ...prev,
+            { sender: 'bot', text: '⛔ You do not have permission to use this command.', time: now },
+          ]);
+          return;
+        }
+
+        if (!targetUser || isNaN(amount) || amount <= 0) {
+          setChatLog((prev) => [
+            ...prev,
+            { sender: 'bot', text: '💡 Usage: `!GP REMOVE @USER <amount>`', time: now },
+          ]);
+          return;
+        }
+
+        fetch('/api/gp/points', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            guildId: 'sim_guild',
+            username: targetUser,
+            amount,
+            action: 'remove',
+            isOwner: true,
+          }),
+        })
+          .then((r) => r.json())
+          .then((data) => {
+            if (data.success) {
+              setChatLog((prev) => [
+                ...prev,
+                {
+                  sender: 'bot',
+                  text:
+                    `🏆 **General Points**\n\n` +
+                    `@${targetUser} lost ${amount} general points.\n\n` +
+                    `**Previous:** ${data.previousBalance}\n` +
+                    `**Removed:** -${amount}\n` +
+                    `**New total:** ${data.newBalance}`,
+                  time: now,
+                },
+              ]);
+              if (onWinRecorded) onWinRecorded();
+            } else {
+              setChatLog((prev) => [
+                ...prev,
+                {
+                  sender: 'bot',
+                  text: data.error || `⚠️ Cannot remove ${amount} general points.`,
+                  time: now,
+                },
+              ]);
+            }
+          })
+          .catch(() => {
+            if (amount > sessionPoints) {
+              setChatLog((prev) => [
+                ...prev,
+                {
+                  sender: 'bot',
+                  text: `⚠️ Cannot remove ${amount} general points. User @${targetUser} only has ${sessionPoints} general points.`,
+                  time: now,
+                },
+              ]);
+              return;
+            }
+            const prevPts = sessionPoints;
+            const newPts = Math.max(0, prevPts - amount);
+            setSessionPoints(newPts);
+            setChatLog((prev) => [
+              ...prev,
+              {
+                sender: 'bot',
+                text:
+                  `🏆 **General Points**\n\n` +
+                  `@${targetUser} lost ${amount} general points.\n\n` +
+                  `**Previous:** ${prevPts}\n` +
+                  `**Removed:** -${amount}\n` +
+                  `**New total:** ${newPts}`,
+                time: now,
+              },
+            ]);
+          });
+        return;
+      }
+
+      if (parts.length === 2 && subCmd !== 'ADD' && subCmd !== 'REMOVE') {
+        const targetUser = parts[1].replace(/[@<#!>]/g, '');
+        fetch(`/api/gp/leaderboard?guildId=sim_guild`)
+          .then((r) => r.json())
+          .then((data) => {
+            const list = data.leaderboard || [];
+            const userObj = list.find(
+              (u: any) => u.username?.toLowerCase() === targetUser.toLowerCase() || u.userId === targetUser
+            );
+            const pts = userObj ? userObj.points : targetUser === playerName ? sessionPoints : 0;
+            setChatLog((prev) => [
+              ...prev,
+              {
+                sender: 'bot',
+                text: `🏆 **General Points**\n\n@${targetUser} currently has **${pts}** general game points.`,
+                time: now,
+              },
+            ]);
+          })
+          .catch(() => {
+            const pts = targetUser === playerName ? sessionPoints : 0;
+            setChatLog((prev) => [
+              ...prev,
+              {
+                sender: 'bot',
+                text: `🏆 **General Points**\n\n@${targetUser} currently has **${pts}** general game points.`,
+                time: now,
+              },
+            ]);
+          });
+        return;
+      }
+
+      fetch(`/api/gp/leaderboard?guildId=sim_guild`)
+        .then((r) => r.json())
+        .then((data) => {
+          const list = data.leaderboard || [];
+          let leaderboardText = `🏆 **GENERAL POINTS LEADERBOARD**\n\n`;
+          if (list.length === 0) {
+            leaderboardText += `🥇 1st — ${playerName} — ${sessionPoints} points`;
+          } else {
+            const medals = ['🥇 1st', '🥈 2nd', '🥉 3rd', '4️⃣ 4th', '5️⃣ 5th'];
+            list.forEach((u: any, idx: number) => {
+              const medal = medals[idx] || `${idx + 1}th`;
+              leaderboardText += `${medal} — ${u.username || u.userId} — ${u.points || 0} points\n`;
+            });
+          }
+          setChatLog((prev) => [
+            ...prev,
+            { sender: 'bot', text: leaderboardText, time: now },
+          ]);
+        })
+        .catch(() => {
+          setChatLog((prev) => [
+            ...prev,
+            {
+              sender: 'bot',
+              text: `🏆 **GENERAL POINTS LEADERBOARD**\n\n🥇 1st — ${playerName} — ${sessionPoints} points`,
+              time: now,
+            },
+          ]);
+        });
+      return;
+    }
+
     if (gameState !== 'running' || isRoundEndedRef.current) return;
 
     const isCurrentPlayerLocked = gameMode === 'reverse' && lockedPlayers.includes(playerName);
