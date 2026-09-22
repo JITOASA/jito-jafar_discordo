@@ -1,0 +1,8 @@
+{
+  "name": "جعفر - بوت ألعاب ديسكورد",
+  "description": "بوت ألعاب مصغرة باللغة العربية لديسكورد يشمل ألعاب اعكس وأعلام وحرف وXO ونظام نقاط ولوحة صدارة متكاملة.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
